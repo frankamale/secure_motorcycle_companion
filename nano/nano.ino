@@ -4,7 +4,6 @@
 const int relayPin = 6;          // Relay control pin
 const int btStatusLed = 5;       // Bluetooth status LED
 const int relayStatusLed = 7;    // Relay status LED
-const int btStatePin = 12;       // HC-05 STATE pin (not used in this version)
 
 // Bluetooth Serial
 SoftwareSerial mySerial(2, 3);   // RX=2, TX=3
@@ -31,7 +30,6 @@ void initializeSystem() {
   pinMode(relayPin, OUTPUT);
   pinMode(btStatusLed, OUTPUT);
   pinMode(relayStatusLed, OUTPUT);
-  pinMode(btStatePin, INPUT); // Not used but configured
 
   // Set initial states
   digitalWrite(btStatusLed, LOW);
@@ -72,6 +70,7 @@ void processBluetoothCommand(String command) {
   } else if (command == "OFF") {
     controlRelay(false);
   }
+
 }
 
 // Function to control the relay and status LED
