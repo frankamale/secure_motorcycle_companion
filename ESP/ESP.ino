@@ -1,6 +1,14 @@
+#include <HardwareSerial.h>
+#include <TinyGPS++.h>
 #include "BluetoothSerial.h"
 
+// GPS Setup
+HardwareSerial gpsSerial(1);
+TinyGPSPlus gps;
+
+// Bluetooth Setup
 BluetoothSerial SerialBT;
+uint8_t hc05_addr[6] = {0x00, 0x24, 0x01, 0x00, 0x06, 0xC1};
 
 // Pin Definitions
 const int touchPin1 = 5;
@@ -18,7 +26,7 @@ unsigned long offTimer = 0;
 unsigned long lastReconnectAttempt = 0;
 const unsigned long RECONNECT_INTERVAL = 5000;
 
-// Accelerometer Configuration
+// Accelerometer Config
 const int numSamples = 20;
 const int sampleDelay = 5;
 const float sensitivity = 0.3;
@@ -35,22 +43,21 @@ float xAccel = 0, yAccel = 0, zAccel = 0;
 float magnitude = 0, prevMagnitude = 0;
 unsigned long prevAccelTime = 0;
 
-// HC-05 MAC Address
-uint8_t hc05_addr[6] = {0x00, 0x24, 0x01, 0x00, 0x06, 0xC1};
-
 void setup() {
   Serial.begin(115200);
-  
-  // Initialize pins
+  gpsSerial.begin(9600, SERIAL_8N1, 16, 17);
+  Serial.println("System Initializing...");
+
+  // Pin Modes
   pinMode(touchPin1, INPUT);
   pinMode(touchPin2, INPUT);
   pinMode(tiltPin, INPUT);
 
-  // Configure ADC for accelerometer
+  // ADC setup
   analogReadResolution(12);
   analogSetAttenuation(ADC_11db);
 
-  // Initialize Bluetooth
+  // Bluetooth setup
   initBluetooth();
 }
 
@@ -60,7 +67,6 @@ void loop() {
     attemptReconnect();
   }
 
-  // Main system functions
   if (SerialBT.connected()) {
     checkTiltSensor();
     sendHeartbeat();
@@ -68,9 +74,11 @@ void loop() {
     receiveBluetoothMessages();
   }
 
-  // Handle accelerometer data
   handleAccelerometer();
+  handleGPS(); 
 }
+
+// --- BLUETOOTH FUNCTIONS ---
 
 void initBluetooth() {
   SerialBT.begin("ESP32_Master", true);
@@ -110,32 +118,22 @@ void handleTouchSensors() {
   bool sensor1 = digitalRead(touchPin1);
   bool sensor2 = digitalRead(touchPin2);
 
-  if (!systemState) {
-    if (sensor1 && sensor2) {
-      if (SerialBT.connected()) {
-        SerialBT.println("ON");
-      }
-      Serial.println("Sent: ON");
-      systemState = true;
+  if (sensor1 && sensor2 && !systemState) {
+    SerialBT.println("ON");
+    Serial.println("Sent: ON");
+    systemState = true;
+    offTimer = 0;
+  } else if (!sensor1 && !sensor2 && systemState) {
+    if (offTimer == 0) {
+      offTimer = millis();
+    } else if (millis() - offTimer >= 5000) {
+      SerialBT.println("OFF");
+      Serial.println("Sent: OFF");
+      systemState = false;
       offTimer = 0;
     }
-  } 
-  else {
-    if (sensor1 || sensor2) {
-      offTimer = 0;
-    } else {
-      if (offTimer == 0) {
-        offTimer = millis();
-      }
-      if (millis() - offTimer >= 5000) {
-        if (SerialBT.connected()) {
-          SerialBT.println("OFF");
-        }
-        Serial.println("Sent: OFF");
-        systemState = false;
-        offTimer = 0;
-      }
-    }
+  } else if (sensor1 || sensor2) {
+    offTimer = 0;
   }
 }
 
@@ -148,8 +146,9 @@ void receiveBluetoothMessages() {
   }
 }
 
+// --- ACCELEROMETER FUNCTION ---
+
 void handleAccelerometer() {
-  // Collect samples
   if (millis() - lastSampleTime >= sampleDelay && sampleCount < numSamples) {
     xSum += analogRead(xPin);
     ySum += analogRead(yPin);
@@ -158,35 +157,26 @@ void handleAccelerometer() {
     lastSampleTime = millis();
   }
 
-  // Process when all samples collected
   if (sampleCount >= numSamples) {
-    // Calculate averages
     float xAvg = xSum / (float)numSamples;
     float yAvg = ySum / (float)numSamples;
     float zAvg = zSum / (float)numSamples;
 
-    // Convert to g-forces
     xAccel = ((xAvg / 4095.0 * voltageRef) - zeroG) / sensitivity;
     yAccel = ((yAvg / 4095.0 * voltageRef) - zeroG) / sensitivity;
     zAccel = ((zAvg / 4095.0 * voltageRef) - zeroG) / sensitivity;
 
-    // Calculate magnitude
-    magnitude = sqrt(xAccel*xAccel + yAccel*yAccel + zAccel*zAccel);
+    magnitude = sqrt(xAccel * xAccel + yAccel * yAccel + zAccel * zAccel);
 
-    // Calculate jerk
     unsigned long currentTime = millis();
     float deltaTime = (currentTime - prevAccelTime) / 1000.0;
     float jerk = (magnitude - prevMagnitude) / deltaTime;
 
-    // Crash detection
     if (magnitude > thresholdG && jerk > jerkThreshold) {
-      if (SerialBT.connected()) {
-        SerialBT.println("CRASH");
-      }
+      SerialBT.println("CRASH");
       Serial.println(">> CRASH DETECTED <<");
     }
 
-    // Serial output
     Serial.print("Accel: ");
     Serial.print(xAccel, 2); Serial.print("g, ");
     Serial.print(yAccel, 2); Serial.print("g, ");
@@ -194,10 +184,35 @@ void handleAccelerometer() {
     Serial.print(magnitude, 2); Serial.print("g, Jerk: ");
     Serial.println(jerk, 2);
 
-    // Reset variables
     xSum = ySum = zSum = 0;
     sampleCount = 0;
     prevMagnitude = magnitude;
     prevAccelTime = currentTime;
+  }
+}
+
+// --- GPS HANDLER ---
+
+void handleGPS() {
+  while (gpsSerial.available()) {
+    gps.encode(gpsSerial.read());
+
+    if (gps.location.isUpdated()) {
+      Serial.print("Lat: ");
+      Serial.println(gps.location.lat(), 6);
+      Serial.print("Lng: ");
+      Serial.println(gps.location.lng(), 6);
+      Serial.print("Speed: ");
+      Serial.print(gps.speed.kmph());
+      Serial.println(" km/h");
+
+      // Optionally send GPS data via Bluetooth
+      if (SerialBT.connected()) {
+        SerialBT.print("GPS:");
+        SerialBT.print(gps.location.lat(), 6);
+        SerialBT.print(",");
+        SerialBT.println(gps.location.lng(), 6);
+      }
+    }
   }
 }

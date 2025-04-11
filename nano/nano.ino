@@ -67,8 +67,11 @@ void processBluetoothCommand(String command) {
 
   if (command == "ON") {
     controlRelay(true);
+        Serial.println("Relay on");
+
   } else if (command == "OFF") {
     controlRelay(false);
+    Serial.println("Relay off");
   }
 
 }
