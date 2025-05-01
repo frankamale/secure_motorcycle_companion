@@ -173,7 +173,7 @@ void handleAccelerometer() {
     float jerk = (magnitude - prevMagnitude) / deltaTime;
 
     if (magnitude > thresholdG && jerk > jerkThreshold) {
-      SerialBT.println("CRASH");
+      SerialBT.println("ACCIDENT");
       Serial.println(">> CRASH DETECTED <<");
     }
 
@@ -207,12 +207,16 @@ void handleGPS() {
       Serial.println(" km/h");
 
       // Optionally send GPS data via Bluetooth
-      if (SerialBT.connected()) {
+     if (SerialBT.connected()) {
         SerialBT.print("GPS:");
         SerialBT.print(gps.location.lat(), 6);
         SerialBT.print(",");
-        SerialBT.println(gps.location.lng(), 6);
-      }
+        SerialBT.print(gps.location.lng(), 6);
+        SerialBT.print(",");
+        SerialBT.print(gps.speed.kmph(), 2);
+        SerialBT.println(" km/h");
+}
+
     }
   }
 }
