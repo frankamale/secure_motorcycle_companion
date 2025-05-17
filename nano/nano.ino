@@ -21,6 +21,7 @@ const char* phoneNumber = "+256765045136";
 // Connection tracking
 unsigned long lastHeartbeatTime = 0;
 const unsigned long TIMEOUT = 2000; // 2 seconds
+bool accidentTriggered = false;
 
 void setup() {
   Serial.begin(9600);
@@ -53,16 +54,54 @@ void handleBluetoothCommunication() {
       lastHeartbeatTime = millis();
       digitalWrite(btStatusLed, HIGH);
       Serial.println(F("Bluetooth Connected"));
+
+    } else if (received.startsWith("ACCIDENT,")) {
+      Serial.println(F("ALERT: Accident Detected!"));
+
+      // Extract GPS data from message
+      // Format: ACCIDENT,<lat>,<lng>,<speed>
+      int firstComma = received.indexOf(',');
+      int secondComma = received.indexOf(',', firstComma + 1);
+      int thirdComma = received.indexOf(',', secondComma + 1);
+
+      if (firstComma != -1 && secondComma != -1 && thirdComma != -1) {
+        String lat = received.substring(firstComma + 1, secondComma);
+        String lng = received.substring(secondComma + 1, thirdComma);
+        String speed = received.substring(thirdComma + 1);
+
+        lat.trim();
+        lng.trim();
+        speed.trim();
+
+        Serial.print(F("Lat: "));
+        Serial.println(lat);
+        Serial.print(F("Lng: "));
+        Serial.println(lng);
+        Serial.print(F("Speed: "));
+        Serial.println(speed);
+
+        // Combine for ThingSpeak
+        String gpsData = lat + "," + lng + "," + speed;
+        sendToThingSpeak(gpsData);
+      } else {
+        Serial.println(F("ERROR: Invalid ACCIDENT data format."));
+      }
+
     } else if (received.startsWith("GPS:")) {
+      String gpsData = received.substring(4);
       Serial.print(F("GPS Data Received: "));
-      Serial.println(received.substring(4));
-      // Do NOT disable Bluetooth here
-      sendToThingSpeak(received.substring(4));
-      // Do NOT re-enable Bluetooth here
+      Serial.println(gpsData);
+
+      if (accidentTriggered) {
+        sendToThingSpeak(gpsData);  
+        accidentTriggered = false; 
+      }
+
     } else if (received.equals("ON")) {
       digitalWrite(relayPin, HIGH);
       digitalWrite(relayStatusLed, HIGH);
       Serial.println(F("Relay ON"));
+
     } else if (received.equals("OFF")) {
       digitalWrite(relayPin, LOW);
       digitalWrite(relayStatusLed, LOW);
@@ -70,6 +109,9 @@ void handleBluetoothCommunication() {
     }
   }
 }
+
+
+
 
 void checkConnectionStatus() {
   if (millis() - lastHeartbeatTime > TIMEOUT) {

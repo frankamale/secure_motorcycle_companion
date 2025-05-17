@@ -32,9 +32,8 @@ const int sampleDelay = 5;
 const float sensitivity = 0.3;
 const float zeroG = 1.5;
 const float voltageRef = 3.3;
-const float thresholdG = 3;
-const float jerkThreshold = 20;
-
+const float thresholdG = 1.2; 
+const float jerkThreshold = 3.0;
 // Accelerometer Variables
 unsigned long lastSampleTime = 0;
 int sampleCount = 0;
@@ -173,8 +172,28 @@ void handleAccelerometer() {
     float jerk = (magnitude - prevMagnitude) / deltaTime;
 
     if (magnitude > thresholdG && jerk > jerkThreshold) {
-      SerialBT.println("ACCIDENT");
       Serial.println(">> CRASH DETECTED <<");
+
+      // Compose accident message
+      String accidentMsg = "ACCIDENT";
+
+      if (gps.location.isValid()) {
+        accidentMsg += ",";
+        accidentMsg += String(gps.location.lat(), 6);
+        accidentMsg += ",";
+        accidentMsg += String(gps.location.lng(), 6);
+        accidentMsg += ",";
+        accidentMsg += String(gps.speed.kmph(), 2);
+        accidentMsg += " km/h";
+      }
+
+      // Send over Bluetooth
+      if (SerialBT.connected()) {
+        SerialBT.println(accidentMsg);
+      }
+
+      // Debug print
+      Serial.println(accidentMsg);
     }
 
     Serial.print("Accel: ");
@@ -190,6 +209,7 @@ void handleAccelerometer() {
     prevAccelTime = currentTime;
   }
 }
+
 
 // --- GPS HANDLER ---
 
