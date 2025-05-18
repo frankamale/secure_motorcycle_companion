@@ -196,12 +196,12 @@ void handleAccelerometer() {
       Serial.println(accidentMsg);
     }
 
-    Serial.print("Accel: ");
-    Serial.print(xAccel, 2); Serial.print("g, ");
-    Serial.print(yAccel, 2); Serial.print("g, ");
-    Serial.print(zAccel, 2); Serial.print("g, Mag: ");
-    Serial.print(magnitude, 2); Serial.print("g, Jerk: ");
-    Serial.println(jerk, 2);
+    // Serial.print("Accel: ");
+    // Serial.print(xAccel, 2); Serial.print("g, ");
+    // Serial.print(yAccel, 2); Serial.print("g, ");
+    // Serial.print(zAccel, 2); Serial.print("g, Mag: ");
+    // Serial.print(magnitude, 2); Serial.print("g, Jerk: ");
+    // Serial.println(jerk, 2);
 
     xSum = ySum = zSum = 0;
     sampleCount = 0;

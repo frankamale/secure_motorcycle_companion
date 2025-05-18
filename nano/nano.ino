@@ -10,13 +10,12 @@ SoftwareSerial gsmSerial(10, 11); // RX, TX
 const uint8_t relayPin = 6;
 const uint8_t btStatusLed = 5;
 const uint8_t relayStatusLed = 7;
-const uint8_t btPowerControlPin = 8; // Power control for Bluetooth (via transistor)
 
 // ThingSpeak API Key
 const char* apiKey = "DF511C8WUI2LXFMS";
 
 // Emergency contact number
-const char* phoneNumber = "+256765045136";
+const char* phoneNumber = "‪+256776975662‬";
 
 // Connection tracking
 unsigned long lastHeartbeatTime = 0;
@@ -26,16 +25,14 @@ bool accidentTriggered = false;
 void setup() {
   Serial.begin(9600);
   btSerial.begin(9600);
-  
+
   pinMode(relayPin, OUTPUT);
   pinMode(btStatusLed, OUTPUT);
   pinMode(relayStatusLed, OUTPUT);
-  pinMode(btPowerControlPin, OUTPUT);
 
   digitalWrite(relayPin, LOW);
   digitalWrite(btStatusLed, LOW);
   digitalWrite(relayStatusLed, LOW);
-  digitalWrite(btPowerControlPin, HIGH); // Bluetooth ON initially
 
   Serial.println(F("System Ready"));
 }
@@ -58,8 +55,6 @@ void handleBluetoothCommunication() {
     } else if (received.startsWith("ACCIDENT,")) {
       Serial.println(F("ALERT: Accident Detected!"));
 
-      // Extract GPS data from message
-      // Format: ACCIDENT,<lat>,<lng>,<speed>
       int firstComma = received.indexOf(',');
       int secondComma = received.indexOf(',', firstComma + 1);
       int thirdComma = received.indexOf(',', secondComma + 1);
@@ -80,7 +75,6 @@ void handleBluetoothCommunication() {
         Serial.print(F("Speed: "));
         Serial.println(speed);
 
-        // Combine for ThingSpeak
         String gpsData = lat + "," + lng + "," + speed;
         sendToThingSpeak(gpsData);
       } else {
@@ -109,9 +103,6 @@ void handleBluetoothCommunication() {
     }
   }
 }
-
-
-
 
 void checkConnectionStatus() {
   if (millis() - lastHeartbeatTime > TIMEOUT) {
@@ -150,7 +141,6 @@ void sendSMSLocation(const String& lat, const String& lng) {
   Serial.print(F("Sending SMS to "));
   Serial.println(phoneNumber);
 
-  // Set SMS to Text Mode
   gsmSerial.println("AT");
   delay(1000);
   while (gsmSerial.available()) Serial.write(gsmSerial.read());
@@ -159,25 +149,21 @@ void sendSMSLocation(const String& lat, const String& lng) {
   delay(1000);
   while (gsmSerial.available()) Serial.write(gsmSerial.read());
 
-  // Begin sending SMS
   gsmSerial.print("AT+CMGS=\"");
   gsmSerial.print(phoneNumber);
   gsmSerial.println("\"");
   delay(1000); // Wait for '>' prompt
 
-  // Compose message
-  gsmSerial.print("Accident Detected!\nLocation: https://maps.google.com/?q=");
+  gsmSerial.print("Alert!!\nAn Accident has been Detected!\nLocation: https://maps.google.com/?q=");
   gsmSerial.print(lat);
   gsmSerial.print(",");
   gsmSerial.println(lng);
 
-  // End message with Ctrl+Z
-  gsmSerial.write(26);
-  delay(5000); // Wait for the GSM module to send the message
+  gsmSerial.write(26); // Ctrl+Z
+  delay(5000); // Wait for message to send
 
   Serial.println("Message sent.");
 }
-
 
 bool waitForResponse(String expected, unsigned long timeout) {
   unsigned long start = millis();
@@ -187,7 +173,7 @@ bool waitForResponse(String expected, unsigned long timeout) {
     while (gsmSerial.available()) {
       char c = gsmSerial.read();
       response += c;
-      Serial.write(c); // Optional: echo for debug
+      Serial.write(c);
       if (response.indexOf(expected) != -1) return true;
     }
   }
@@ -196,11 +182,9 @@ bool waitForResponse(String expected, unsigned long timeout) {
 }
 
 void sendToThingSpeak(const String& gpsData) {
-  // Initialize GSM module
   gsmSerial.begin(9600);
   Serial.println(F("Initializing GSM..."));
 
-  // Check basic GSM functionality
   if (!sendCommand("AT", "OK", 2000)) return;
   if (!sendCommand("AT+CPIN?", "READY", 5000)) return;
   if (!sendCommand("AT+CREG?", "0,1", 5000)) return;
@@ -217,7 +201,6 @@ void sendToThingSpeak(const String& gpsData) {
   if (!sendCommand("AT+CIPSTART=\"TCP\",\"api.thingspeak.com\",\"80\"", "CONNECT OK", 10000)) return;
   delay(3000);
 
-  // Parse GPS Data
   int firstComma = gpsData.indexOf(',');
   int secondComma = gpsData.indexOf(',', firstComma + 1);
 
@@ -237,7 +220,6 @@ void sendToThingSpeak(const String& gpsData) {
   int spaceIndex = speedRaw.indexOf(' ');
   String speed = (spaceIndex != -1) ? speedRaw.substring(0, spaceIndex) : speedRaw;
 
-  // Debug output
   Serial.print(F("Parsed lat: "));
   Serial.println(lat);
   Serial.print(F("Parsed lng: "));
@@ -245,10 +227,8 @@ void sendToThingSpeak(const String& gpsData) {
   Serial.print(F("Parsed speed: "));
   Serial.println(speed);
 
-  // Send to ThingSpeak
   if (!sendCommand("AT+CIPSEND", ">", 5000)) return;
 
-  // Build HTTP request
   gsmSerial.print(F("GET /update?api_key="));
   gsmSerial.print(apiKey);
   gsmSerial.print(F("&field1="));
@@ -262,7 +242,6 @@ void sendToThingSpeak(const String& gpsData) {
   delay(2000);
   gsmSerial.write(26); // Ctrl+Z
 
-  // Wait for response or timeout after 10 seconds
   unsigned long start = millis();
   bool sentOK = false;
   
@@ -283,7 +262,18 @@ void sendToThingSpeak(const String& gpsData) {
   sendCommand("AT+CIPSHUT", "SHUT OK", 5000);
   Serial.println(F("Data sent"));
 
-  // Optionally send SMS
   sendSMSLocation(lat, lng);
   delay(1000);
+
+  restartBluetooth();  // Software-only reinitialization
+}
+
+// Software-only Bluetooth restart
+void restartBluetooth() {
+  Serial.println(F("Reinitializing Bluetooth connection (software only)..."));
+  btSerial.end();
+  delay(1000);
+  btSerial.begin(9600);
+  btSerial.println("Ready again");
+  Serial.println(F("Bluetooth serial restarted and notified."));
 }
